@@ -1,6 +1,6 @@
-import Database from "better-sqlite3"; import fs from "fs"; import path from "path";
-const dir=path.join(process.cwd(),"data"); if(!fs.existsSync(dir))fs.mkdirSync(dir,{recursive:true});
-const g=globalThis as unknown as {db?:Database.Database}; const db=g.db??new Database(path.join(dir,"aviator.sqlite")); if(process.env.NODE_ENV!=="production")g.db=db;
-db.pragma("journal_mode = WAL"); db.exec(`CREATE TABLE IF NOT EXISTS rounds(id INTEGER PRIMARY KEY AUTOINCREMENT,round_id TEXT UNIQUE NOT NULL,multiplier REAL NOT NULL,server_seed_hash TEXT DEFAULT '',client_seed TEXT DEFAULT '',player_seed TEXT DEFAULT '',created_at TEXT NOT NULL)`);
-if((db.prepare("SELECT COUNT(*) n FROM rounds").get() as {n:number}).n===0){const vals=[1.21,5.42,1.08,2.76,8.27,1.34,3.93,1.56,6.62,2.18,1.17,3.44,1.02,2.91,11.6,1.78,4.21,1.13,7.34,2.56,1.49,3.08,1.05,5.87,2.24,1.92,9.14,1.31,3.67,2.08];const ins=db.prepare("INSERT INTO rounds(round_id,multiplier,server_seed_hash,client_seed,player_seed,created_at) VALUES(?,?,?,?,?,?)");vals.forEach((m,i)=>ins.run(String(7766992+i),m,`demo_hash_${i+1}`,`demo_client_${i+1}`,`demo_player_${i+1}`,new Date(Date.now()-(vals.length-i)*60000).toISOString()));}
-export default db;
+
+import { neon } from "@neondatabase/serverless";
+
+const sql = neon(process.env.DATABASE_URL!);
+
+export default sql;
