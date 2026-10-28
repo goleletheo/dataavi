@@ -1,24 +1,26 @@
 
 import { NextResponse } from "next/server";
-import { neon } from "@neondatabase/serverless";
+import sql from "@/lib/db";
 
 export const dynamic = "force-dynamic";
 
-const sql = neon(process.env.DATABASE_URL!);
+async function ensureTable() {
+  await sql`
+    CREATE TABLE IF NOT EXISTS rounds (
+      id BIGSERIAL PRIMARY KEY,
+      round_id TEXT UNIQUE NOT NULL,
+      multiplier DOUBLE PRECISION NOT NULL,
+      server_seed_hash TEXT DEFAULT '',
+      client_seed TEXT DEFAULT '',
+      player_seed TEXT DEFAULT '',
+      created_at TEXT NOT NULL
+    )
+  `;
+}
 
 export async function GET() {
   try {
-    await sql`
-      CREATE TABLE IF NOT EXISTS rounds (
-        id BIGSERIAL PRIMARY KEY,
-        round_id TEXT UNIQUE NOT NULL,
-        multiplier DOUBLE PRECISION NOT NULL,
-        server_seed_hash TEXT DEFAULT '',
-        client_seed TEXT DEFAULT '',
-        player_seed TEXT DEFAULT '',
-        created_at TEXT NOT NULL
-      )
-    `;
+    await ensureTable();
 
     const rounds = await sql`
       SELECT * FROM rounds ORDER BY id DESC
@@ -27,6 +29,7 @@ export async function GET() {
     return NextResponse.json({ rounds });
   } catch (error) {
     console.error("Failed to load rounds:", error);
+
     return NextResponse.json(
       { error: "Could not load rounds from the database." },
       { status: 500 }
@@ -36,9 +39,11 @@ export async function GET() {
 
 export async function POST(req: Request) {
   try {
-    const b = await req.json();
-    const multiplier = Number(b.multiplier);
-    const roundId = String(b.round_id || `manual-${Date.now()}`);
+    const body = await req.json();
+    const multiplier = Number(body.multiplier);
+    const roundId = String(
+      body.round_id || `manual-${Date.now()}`
+    );
 
     if (!Number.isFinite(multiplier) || multiplier < 1) {
       return NextResponse.json(
@@ -47,37 +52,35 @@ export async function POST(req: Request) {
       );
     }
 
-    await sql`
-      CREATE TABLE IF NOT EXISTS rounds (
-        id BIGSERIAL PRIMARY KEY,
-        round_id TEXT UNIQUE NOT NULL,
-        multiplier DOUBLE PRECISION NOT NULL,
-        server_seed_hash TEXT DEFAULT '',
-        client_seed TEXT DEFAULT '',
-        player_seed TEXT DEFAULT '',
-        created_at TEXT NOT NULL
-      )
-    `;
+    await ensureTable();
 
-    const rows = await sql`
+    const result = await sql`
       INSERT INTO rounds (
-        round_id, multiplier, server_seed_hash,
-        client_seed, player_seed, created_at
+        round_id,
+        multiplier,
+        server_seed_hash,
+        client_seed,
+        player_seed,
+        created_at
       )
       VALUES (
         ${roundId},
         ${multiplier},
-        ${String(b.server_seed_hash || "")},
-        ${String(b.client_seed || "")},
-        ${String(b.player_seed || "")},
+        ${String(body.server_seed_hash || "")},
+        ${String(body.client_seed || "")},
+        ${String(body.player_seed || "")},
         ${new Date().toISOString()}
       )
       RETURNING *
     `;
 
-    return NextResponse.json({ round: rows[0] }, { status: 201 });
+    return NextResponse.json(
+      { round: result[0] },
+      { status: 201 }
+    );
   } catch (error) {
     console.error("Failed to save round:", error);
+
     return NextResponse.json(
       { error: "Could not save round. Check whether the round ID already exists." },
       { status: 400 }
